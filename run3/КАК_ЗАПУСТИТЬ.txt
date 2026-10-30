@@ -1,15 +1,18 @@
-Один файл, без сайта.
+Один файл + карта, без сайта.
 
-1. Скопируй square_flight.py на дрон, например в /home/sverk/mission/
+Правое поле (дрон 2): Right_TSU.txt  метки 25–49
+Левое поле (дрон 1): Left_TSU.txt   метки 0–24
 
-   scp square_flight.py sverk@192.168.1.27:/home/sverk/mission/
+1. Скопируй скрипт и карту:
 
-2. SSH на дрон и запусти В окружении Сверх (иначе не найдёт sverk_interfaces):
+   scp square_flight.py Right_TSU.txt sverk@192.168.1.27:/home/sverk/mission/
+
+2. SSH и ROS:
 
    ssh sverk@192.168.1.27
    source /opt/ros/humble/setup.bash
    source ~/sverk_ws/install/setup.bash
-   python3 /home/sverk/mission/square_flight.py
+   python3 /home/sverk/mission/square_flight.py /home/sverk/mission/Right_TSU.txt
 
 Если source не помогает:
 
