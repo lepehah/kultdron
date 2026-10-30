@@ -1,3 +1,15 @@
+Проверка ARM (сначала это):
+
+  scp arm_test.py sverk@IP:/home/sverk/mission/
+  ssh sverk@IP
+  source /opt/ros/humble/setup.bash
+  source ~/sverk_ws/install/setup.bash
+  python3 /home/sverk/mission/arm_test.py
+
+В терминале должно быть armed=True. Если нет — offboard/ArUco/предохранитель, не «скрипт квадрата».
+
+---
+
 Один файл + карта, без сайта.
 
 Правое поле (дрон 2): Right_TSU.txt  метки 25–49
