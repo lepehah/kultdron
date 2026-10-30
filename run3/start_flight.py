@@ -46,10 +46,11 @@ LINKS: Dict[int, dict] = {
     },
 }
 
+_KNOWN = HERE / "logs" / "known_hosts"
 SSH_OPTS = [
     "-o", "ConnectTimeout=6",
     "-o", "StrictHostKeyChecking=accept-new",
-    "-o", "UserKnownHostsFile=/dev/null",
+    "-o", f"UserKnownHostsFile={_KNOWN}",
 ]
 
 
@@ -395,17 +396,31 @@ def push_and_start(matrix_path: Path, on_status: Callable[[str, str], None],
         _scp(drone_id, [str(HERE / name) for name in PAYLOAD if (HERE / name).is_file()], f"{remote_dir}/")
 
     on_status("starting", f"стартую {script} на {drones}")
+    _KNOWN.parent.mkdir(parents=True, exist_ok=True)
     for drone_id in drones:
         remote_dir = LINKS[drone_id]["remote_dir"]
         extra = f"'{remote_dir}/matrix.json' --ui '{url}'" if script == "a8gem.py" else ""
+        logf = f"{remote_dir}/logs/console_d{drone_id}.txt"
+        # pkill -f по подстроке убивал саму SSH-сессию (в cmdline есть имя скрипта).
         remote = (
             f"chmod +x '{remote_dir}/board_run.sh'; "
-            f"pkill -f '{script} --drone {drone_id}' >/dev/null 2>&1 || true; "
+            f"mkdir -p '{remote_dir}/logs'; "
+            "for pid in $(pgrep -f '[p]ython3' || true); do "
+            f"  tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null | grep -q '{script} --drone {drone_id}' "
+            f"  && kill $pid 2>/dev/null || true; "
+            "done; "
             f"nohup '{remote_dir}/board_run.sh' {script} --drone {drone_id} {extra} "
-            f"> '{remote_dir}/logs/console_d{drone_id}.txt' 2>&1 &"
+            f"> '{logf}' 2>&1 < /dev/null & echo STARTED:$!"
         )
-        _ssh(drone_id, remote, timeout=20)
-        mlog.info("запущен %s --drone %s на %s", script, drone_id, host_for(drone_id))
+        out = _ssh(drone_id, remote, timeout=20, check=False)
+        mlog.info("запущен %s --drone %s на %s (%s)", script, drone_id, host_for(drone_id), out.strip())
+        time.sleep(2)
+        try:
+            tail = _ssh(drone_id, f"tail -n 40 '{logf}' || true", timeout=12, check=False)
+            mlog.info("консоль дрон%s:\n%s", drone_id, tail)
+            on_status("running", f"дрон {drone_id}: {(tail or out or 'стартовал')[-400:]}")
+        except Exception as exc:
+            mlog.warning("не прочитали консоль дрон%s: %s", drone_id, exc)
     on_status("running", f"летят: {drones} скрипт {script}")
 
 
