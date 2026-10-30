@@ -1,0 +1,19 @@
+Один файл, без сайта.
+
+1. Скопируй square_flight.py на дрон, например в /home/sverk/mission/
+
+   scp square_flight.py sverk@192.168.1.27:/home/sverk/mission/
+
+2. SSH на дрон и запусти В окружении Сверх (иначе не найдёт sverk_interfaces):
+
+   ssh sverk@192.168.1.27
+   source /opt/ros/humble/setup.bash
+   source ~/sverk_ws/install/setup.bash
+   python3 /home/sverk/mission/square_flight.py
+
+Если source не помогает:
+
+   docker exec -it $(docker ps --format '{{.Names}}' | grep -i sverk | head -1) bash
+   python3 /home/sverk/mission/square_flight.py
+
+Маршрут: (0,0) → (4,0) → (4,4) → (0,4) → (0,0), в терминале печатает координаты и ID меток, садится.
