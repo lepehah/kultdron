@@ -49,30 +49,33 @@ def main():
     try:
         dump(drone, "до ARM")
 
-        armed = False
-        if hasattr(drone.control, "arm"):
-            print("вызов control.arm()")
-            res = drone.control.arm()
-            print("  ответ:", res)
-        else:
-            print("control.arm() нет — взлёт body z=0.4 с auto_arm=True")
-            res = drone.control.navigate_wait(
-                x=0.0, y=0.0, z=0.4,
-                yaw=float("nan"),
-                speed=0.3,
-                frame_id="body",
-                auto_arm=True,
-                timeout=20.0,
-                tolerance=0.2,
-            )
-            print("  navigate_wait:", res)
+        print("режим уже", getattr(t0, "mode", "?"),
+              "— auto_arm идёт сервисом set_position, не navigate_wait")
+        res = drone.control.set_position(
+            x=0.0, y=0.0, z=0.4,
+            yaw=float("nan"),
+            frame_id="body",
+            auto_arm=True,
+            timeout=15.0,
+        )
+        print("set_position auto_arm:", res)
+        for name in ("success", "message", "result"):
+            if hasattr(res, name):
+                print(f"  .{name}={getattr(res, name)}")
 
-        time.sleep(1.0)
+        time.sleep(1.5)
         t = dump(drone, "после ARM")
         armed = bool(getattr(t, "armed", False))
-        print("ARMED =" , armed)
+        print("ARMED =", armed)
         if not armed:
-            print("НЕ заармился. Часто: нет offboard, не видит ArUco, предохранитель, RC не в offboard.")
+            print(
+                "PX4 не дал ARM (не ошибка Python). Проверь:\n"
+                "  1) предохранитель / safety на плате\n"
+                "  2) батарея и пропеллеры\n"
+                "  3) QGC / Sverk web: почему prearm\n"
+                "  4) пульт: разрешён offboard, не kill\n"
+                "Скрипт видит дрон (connected + OFFBOARD + координаты) — дальше блокирует автопилот."
+            )
         else:
             print("ок, держим 3 секунды")
             time.sleep(3.0)
