@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Сверх.Рой — Панель управления</title>
+  <style>
+    :root {
+      --bg-main: #0b0f17;
+      --bg-panel: #131b2e;
+      --bg-card: #1a243b;
+      --border-color: #293855;
+      --text-main: #e2e8f0;
+      --text-muted: #8b9bb4;
+      
+      --drone1-color: #38bdf8;
+      --drone2-color: #c084fc;
+
+      --fly-color: #10b981;
+      --fly-bg: rgba(16, 185, 129, 0.14);
+      --fly-border: rgba(16, 185, 129, 0.55);
+
+      --nofly-color: #f43f5e;
+      --nofly-bg: repeating-linear-gradient(
+        45deg,
+        rgba(244, 63, 94, 0.12),
+        rgba(244, 63, 94, 0.12) 8px,
+        rgba(244, 63, 94, 0.28) 8px,
+        rgba(244, 63, 94, 0.28) 16px
+      );
+
+      --accent-green: #10b981;
+      --accent-yellow: #eab308;
+      --accent-red: #ef4444;
+      --accent-blue: #3b82f6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-color);
+      padding: 8px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1rem; }
+    .status-badge {
+      padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+      background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .telemetry-header { display: flex; gap: 20px; align-items: center; }
+    .bat-indicator {
+      font-family: monospace; font-size: 0.85rem; padding: 2px 8px; border-radius: 4px;
+      background: var(--bg-card); border: 1px solid var(--border-color);
+    }
+
+    .top-workspace {
+      display: grid; grid-template-columns: 460px 1fr; gap: 16px; padding: 14px 20px;
+      border-bottom: 1px solid var(--border-color); flex-shrink: 0; background: rgba(19, 27, 46, 0.5);
+    }
+    .panel {
+      background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 10px;
+      padding: 14px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .panel-header {
+      display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.9rem;
+      border-bottom: 1px solid var(--border-color); padding-bottom: 8px;
+    }
+
+    .grid-wrapper { display: flex; gap: 14px; align-items: center; }
+    .grid-stage {
+      position: relative;
+      width: calc(5 * 56px + 4 * 5px);
+      height: calc(5 * 56px + 4 * 5px);
+      flex-shrink: 0;
+    }
+    .polygon-grid {
+      display: grid; grid-template-columns: repeat(5, 56px); grid-template-rows: repeat(5, 56px); gap: 5px; user-select: none;
+    }
+    .path-overlay {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 4;
+    }
+    .grid-cell.zone-path-d1 { box-shadow: inset 0 0 0 2px rgba(56, 189, 248, 0.95); }
+    .grid-cell.zone-path-d2 { box-shadow: inset 0 0 0 2px rgba(192, 132, 252, 0.95); }
+    .grid-cell.zone-path-d1.zone-path-d2 {
+      box-shadow: inset 0 0 0 2px #38bdf8, inset 0 0 0 4px #c084fc;
+    }
+    .cell-finds {
+      position: absolute; left: 4px; bottom: 4px; display: flex; gap: 2px; z-index: 1;
+    }
+    .cell-find {
+      width: 9px; height: 9px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.7);
+    }
+    .ssh-box {
+      display: flex; flex-direction: column; gap: 8px;
+      background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 10px;
+    }
+    .ssh-row { display: grid; grid-template-columns: 56px 1fr 1fr 70px; gap: 6px; align-items: center; }
+    .ssh-row-2 { display: grid; grid-template-columns: 56px 1fr 1fr; gap: 6px; align-items: center; }
+    .ssh-btns { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 56px; }
+    .cam-preview {
+      display: none; max-width: 100%; max-height: 180px; border-radius: 8px;
+      border: 1px solid var(--border-color); margin-left: 56px;
+    }
+    .ssh-box input {
+      background: #0b1220; border: 1px solid var(--border-color); color: var(--text-main);
+      border-radius: 6px; padding: 6px 8px; font-size: 0.75rem; width: 100%;
+    }
+    .ssh-label { font-size: 0.75rem; font-weight: 700; color: var(--drone1-color); }
+    .ssh-label.d2 { color: var(--drone2-color); }
+    .ssh-status { font-size: 0.72rem; color: var(--text-muted); grid-column: 2 / -1; min-height: 1.1em; }
+    .grid-cell {
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px;
+      position: relative; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between;
+      padding: 4px; transition: all 0.15s ease;
+    }
+    .grid-cell:hover { transform: translateY(-1px); border-color: #64748b; }
+    .cell-coords { font-size: 0.65rem; font-family: monospace; color: var(--text-muted); }
+    .cell-status-label { font-size: 0.6rem; font-weight: 700; text-align: right; opacity: 0.85; }
+
+    .grid-cell.zone-fly { background: var(--fly-bg); border-color: var(--fly-border); }
+    .grid-cell.zone-nofly { background: var(--nofly-bg); border-color: var(--nofly-color); }
+
+    .drone-marker {
+      position: absolute; inset: 6px; border-radius: 50%; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; font-weight: 800; font-size: 0.7rem;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.8); pointer-events: none; z-index: 2; transition: all 0.25s ease;
+    }
+    .drone-marker.d1 { background: var(--drone1-color); color: #090d16; border: 2px solid #fff; }
+    .drone-marker.d2 { background: var(--drone2-color); color: #090d16; border: 2px solid #fff; }
+
+    .map-sidebar { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .tool-btn {
+      background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main);
+      padding: 6px 10px; border-radius: 6px; font-size: 0.76rem; cursor: pointer; text-align: left;
+      display: flex; align-items: center; gap: 8px; transition: 0.15s;
+    }
+    .tool-btn:hover { background: #23304d; }
+    .tool-btn.active { border-color: var(--drone1-color); background: rgba(56, 189, 248, 0.12); font-weight: 600; }
+    .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+
+    .actions-layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; height: 100%; }
+    .btn-group-main { display: flex; flex-direction: column; gap: 10px; justify-content: space-between; }
+    .primary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    
+    .btn {
+      padding: 11px 14px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+      border: 1px solid transparent; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s;
+    }
+    .btn-download { background: var(--bg-card); border-color: var(--drone1-color); color: var(--drone1-color); }
+    .btn-download:hover { background: rgba(56, 189, 248, 0.15); }
+    
+    .btn-launch { background: var(--accent-green); color: #062117; font-weight: 700; }
+    .btn-launch:hover { filter: brightness(1.1); }
+
+    .preset-bar { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn-sm {
+      background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-muted);
+      padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; transition: 0.15s;
+    }
+    .btn-sm:hover { color: var(--text-main); border-color: #64748b; }
+
+    .summary-box {
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px;
+      padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .counters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
+    .counter-card {
+      background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 8px 6px; text-align: center;
+    }
+    .counter-val { font-size: 1.35rem; font-weight: 800; font-family: monospace; }
+    .counter-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+
+    .bottom-logs {
+      flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 20px 16px 20px; min-height: 0;
+    }
+    .log-column {
+      background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 10px;
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .log-col-header {
+      padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex;
+      justify-content: space-between; align-items: center; font-size: 0.88rem; font-weight: 700;
+    }
+    .d1-title { color: var(--drone1-color); }
+    .d2-title { color: var(--drone2-color); }
+    
+    .log-list { padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    
+    .log-card {
+      background: var(--bg-card); border: 1px solid var(--border-color); border-left: 3px solid var(--border-color);
+      border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 64px 1fr; gap: 12px;
+      align-items: center; animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .log-card.d1-card { border-left-color: var(--drone1-color); }
+    .log-card.d2-card { border-left-color: var(--drone2-color); }
+
+    .vision-preview {
+      width: 64px; height: 64px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border-color);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden;
+      background-size: cover; background-position: center;
+    }
+    .target-square { width: 28px; height: 28px; border-radius: 3px; box-shadow: 0 0 8px rgba(0,0,0,0.6); border: 1.5px solid rgba(255,255,255,0.7); }
+    .aruco-tag { position: absolute; bottom: 2px; right: 3px; font-size: 0.55rem; font-family: monospace; color: #fff; background: rgba(0,0,0,0.6); padding: 0 3px; border-radius: 2px; }
+    .log-meta { display: flex; flex-direction: column; gap: 4px; }
+    .log-top-row { display: flex; justify-content: space-between; align-items: center; font-family: monospace; font-size: 0.75rem; color: var(--text-muted); }
+    .coords-pill { background: rgba(255, 255, 255, 0.06); padding: 1px 6px; border-radius: 4px; color: var(--text-main); }
+    .recognition-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600; }
+    .log-msg { font-size: 0.82rem; color: var(--text-main); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span>🛸 СВЕРХ.РОЙ // ПАНЕЛЬ УПРАВЛЕНИЯ</span>
+      <span class="status-badge" id="rosStatus">ОЖИДАНИЕ ROS 2...</span>
+    </div>
+    <div class="telemetry-header">
+      <span class="bat-indicator" id="batD1">🔋 Дрон 1: -- В</span>
+      <span class="bat-indicator" id="batD2">🔋 Дрон 2: -- В</span>
+    </div>
+  </header>
+
+  <section class="top-workspace">
+    <div class="panel">
+      <div class="panel-header">
+        <span>Карта полётной зоны (5×5)</span>
+      </div>
+      <div class="grid-wrapper">
+        <div class="grid-stage">
+          <div id="polygonGrid" class="polygon-grid"></div>
+          <svg id="pathOverlay" class="path-overlay" viewBox="0 0 300 300" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="map-sidebar">
+          <button class="tool-btn active" data-tool="cycle" onclick="UI.selectTool('cycle')">🔄 Переключить (Можно ↔ Нельзя)</button>
+          <button class="tool-btn" data-tool="1" onclick="UI.selectTool('1')"><span class="swatch" style="background: var(--fly-color);"></span> Можно летать [1]</button>
+          <button class="tool-btn" data-tool="-1" onclick="UI.selectTool('-1')"><span class="swatch" style="background: var(--nofly-color);"></span> Нельзя летать [-1]</button>
+          <button class="tool-btn" data-tool="pos1" onclick="UI.selectTool('pos1')">📍 Позиция Дрона 1</button>
+          <button class="tool-btn" data-tool="pos2" onclick="UI.selectTool('pos2')">📍 Позиция Дрона 2</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span>Управление полётом и картой препятствий</span>
+        <div class="preset-bar">
+          <button class="btn-sm" onclick="UI.resetFlyZone()">Разрешить всё [1]</button>
+          <button class="btn-sm" onclick="UI.swapDrones()">Поменять дроны ⇄</button>
+        </div>
+      </div>
+
+      <div class="ssh-box">
+        <div style="font-size:0.8rem; font-weight:600;">Связь с дроном: IP + мост :9090 (орги: HTTP вызывает ROS get_telemetry). SSH — запасной путь.</div>
+        <div class="ssh-row">
+          <span class="ssh-label">Дрон 1</span>
+          <input id="ssh1user" placeholder="user (sverk / orangepi)" value="sverk">
+          <input id="ssh1host" placeholder="IP" value="192.168.1.19">
+          <input id="ssh1port" placeholder="порт" value="22">
+        </div>
+        <div class="ssh-row-2">
+          <span></span>
+          <input id="ssh1pass" type="password" placeholder="пароль (пусто = ключ)">
+          <input id="ssh1dir" placeholder="папка на плате" value="/home/sverk/mission">
+        </div>
+        <div class="ssh-btns">
+          <button class="btn-sm" onclick="UI.connectDrone(1)">SSH</button>
+          <button class="btn-sm" onclick="UI.probeBridge(1)">Мост 9090</button>
+          <button class="btn-sm" onclick="UI.listTopics(1)">Топики</button>
+          <button class="btn-sm" onclick="UI.showCamera(1)">Камера</button>
+        </div>
+        <div class="ssh-status" id="ssh1status">не подключали</div>
+        <img id="cam1preview" class="cam-preview" alt="камера дрон 1">
+        <div class="ssh-row">
+          <span class="ssh-label d2">Дрон 2</span>
+          <input id="ssh2user" placeholder="user" value="sverk">
+          <input id="ssh2host" placeholder="IP" value="192.168.1.27">
+          <input id="ssh2port" placeholder="порт" value="22">
+        </div>
+        <div class="ssh-row-2">
+          <span></span>
+          <input id="ssh2pass" type="password" placeholder="пароль (пусто = ключ)">
+          <input id="ssh2dir" placeholder="папка на плате" value="/home/sverk/mission">
+        </div>
+        <div class="ssh-btns">
+          <button class="btn-sm" onclick="UI.connectDrone(2)">SSH</button>
+          <button class="btn-sm" onclick="UI.probeBridge(2)">Мост 9090</button>
+          <button class="btn-sm" onclick="UI.listTopics(2)">Топики</button>
+          <button class="btn-sm" onclick="UI.showCamera(2)">Камера</button>
+        </div>
+        <div class="ssh-status" id="ssh2status">не подключали</div>
+        <img id="cam2preview" class="cam-preview" alt="камера дрон 2">
+      </div>
+
+      <div class="actions-layout">
+        <div class="btn-group-main">
+          <div class="primary-actions">
+            <button class="btn btn-download" onclick="UI.downloadMatrix()">📥 Скачать matrix.json</button>
+            <button id="launchBtn" class="btn btn-launch" onclick="UI.emitStartFlight()">🚀 Запуск полёта</button>
+          </div>
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:0.85rem;">
+            <label><input type="checkbox" id="fly1" checked> Дрон 1</label>
+            <label><input type="checkbox" id="fly2"> Дрон 2</label>
+            <button class="btn-sm" onclick="UI.emitFirstFlight()">Первый полёт (zz6)</button>
+          </div>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-sm" style="flex:1; padding: 8px;" onclick="UI.testLog(1)">+ Тест-лог (Д1)</button>
+            <button class="btn-sm" style="flex:1; padding: 8px;" onclick="UI.testLog(2)">+ Тест-лог (Д2)</button>
+            <button class="btn-sm" style="padding: 8px; color: var(--nofly-color); border-color: rgba(244,63,94,0.4);" onclick="UI.emitKillSwitch()">🛑 Стоп</button>
+          </div>
+        </div>
+
+        <div class="summary-box">
+          <div style="display:flex; justify-content:space-between; font-size:0.78rem; font-weight:600;">
+            <span>Общая ведомость квадратов</span>
+            <span style="color:var(--text-muted); cursor:pointer;" onclick="UI.resetCounters()">[Сброс]</span>
+          </div>
+          <div class="counters-grid">
+            <div class="counter-card"><div class="counter-val" id="countRed" style="color: var(--accent-red);">0</div><div class="counter-label">Красные</div></div>
+            <div class="counter-card"><div class="counter-val" id="countYellow" style="color: var(--accent-yellow);">0</div><div class="counter-label">Жёлтые</div></div>
+            <div class="counter-card"><div class="counter-val" id="countBlue" style="color: var(--accent-blue);">0</div><div class="counter-label">Синие/Зел</div></div>
+            <div class="counter-card"><div class="counter-val" id="countTotal">0</div><div class="counter-label">Всего</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bottom-logs">
+    <div class="log-column">
+      <div class="log-col-header">
+        <span class="d1-title">● ДРОН 1 — Логи</span>
+        <span id="d1PosHeader" style="font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">Pos: [0, 0]</span>
+      </div>
+      <div id="logListD1" class="log-list"></div>
+    </div>
+    <div class="log-column">
+      <div class="log-col-header">
+        <span class="d2-title">● ДРОН 2 — Логи</span>
+        <span id="d2PosHeader" style="font-family: monospace; font-size: 0.78rem; color: var(--text-muted);">Pos: [4, 0]</span>
+      </div>
+      <div id="logListD2" class="log-list"></div>
+    </div>
+  </section>
+
+  <script>
+    const UI = {
+      state: {
+        currentTool: 'cycle',
+        // 1 — можно летать, -1 — нельзя летать (No-Fly)
+        matrix: [
+          [1, 1, -1, 1, 1],
+          [1, 1,  1, 1, 1],
+          [1, 1,  1, 1, 1],
+          [1, 1,  1, 1, 1],
+          [1, 1, -1, 1, 1]
+        ],
+        drone1: [0, 0],
+        drone2: [4, 0],
+        detectedLocations: new Set(),
+        counts: { red: 0, yellow: 0, blue: 0 },
+        route1: [],
+        route2: [],
+        finds: {},
+        lastEventId: 0
+      },
+
+      colors: {
+        red: { label: 'Красный', hex: '#ef4444', countKey: 'red' },
+        yellow: { label: 'Жёлтый', hex: '#eab308', countKey: 'yellow' },
+        blue: { label: 'Синий', hex: '#3b82f6', countKey: 'blue' },
+        green: { label: 'Зелёный (Сим)', hex: '#10b981', countKey: 'blue' }
+      },
+
+      cellKey(x, y) {
+        return `${Math.round(x)},${Math.round(y)}`;
+      },
+
+      routeSet(route) {
+        const set = new Set();
+        (route || []).forEach(p => set.add(this.cellKey(p[0], p[1])));
+        return set;
+      },
+
+      renderGrid() {
+        const gridEl = document.getElementById('polygonGrid');
+        gridEl.innerHTML = '';
+        const path1 = this.routeSet(this.state.route1);
+        const path2 = this.routeSet(this.state.route2);
+        const d1x = Math.round(this.state.drone1[0]);
+        const d1y = Math.round(this.state.drone1[1]);
+        const d2x = Math.round(this.state.drone2[0]);
+        const d2y = Math.round(this.state.drone2[1]);
+
+        for (let y = 0; y < 5; y++) {
+          for (let x = 0; x < 5; x++) {
+            const val = this.state.matrix[y][x];
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            const isFlyable = val !== -1;
+            const statusText = isFlyable ? 'FLY [1]' : 'NO-FLY';
+            cell.classList.add(isFlyable ? 'zone-fly' : 'zone-nofly');
+            const key = this.cellKey(x, y);
+            if (path1.has(key)) cell.classList.add('zone-path-d1');
+            if (path2.has(key)) cell.classList.add('zone-path-d2');
+
+            cell.innerHTML = `<span class="cell-coords">(${x},${y})</span><span class="cell-status-label">${statusText}</span>`;
+
+            const finds = this.state.finds[key] || [];
+            if (finds.length) {
+              const pips = finds.map(c => {
+                const hex = (this.colors[c] || {}).hex || '#fff';
+                return `<span class="cell-find" style="background:${hex}"></span>`;
+              }).join('');
+              cell.innerHTML += `<div class="cell-finds">${pips}</div>`;
+            }
+
+            if (d1x === x && d1y === y) {
+              cell.innerHTML += `<div class="drone-marker d1"><span>Д1</span></div>`;
+            }
+            if (d2x === x && d2y === y) {
+              cell.innerHTML += `<div class="drone-marker d2"><span>Д2</span></div>`;
+            }
+
+            cell.addEventListener('click', () => this.handleCellClick(x, y));
+            gridEl.appendChild(cell);
+          }
+        }
+        document.getElementById('d1PosHeader').textContent = `Pos: [${d1x}, ${d1y}]`;
+        document.getElementById('d2PosHeader').textContent = `Pos: [${d2x}, ${d2y}]`;
+        this.drawPathOverlay();
+      },
+
+      drawPathOverlay() {
+        const svg = document.getElementById('pathOverlay');
+        if (!svg) return;
+        const cell = 56, gap = 5, step = cell + gap;
+        const pt = (p) => {
+          const x = Number(p[0]) * step + cell / 2;
+          const y = Number(p[1]) * step + cell / 2;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        };
+        const line = (route, color, width) => {
+          if (!route || route.length < 2) return '';
+          const d = route.map(pt).join(' ');
+          return `<polyline points="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>`;
+        };
+        const w = 5 * cell + 4 * gap;
+        svg.setAttribute('viewBox', `0 0 ${w} ${w}`);
+        svg.innerHTML = line(this.state.route1, '#38bdf8', 3) + line(this.state.route2, '#c084fc', 3);
+      },
+
+      applyLiveState(live) {
+        if (!live) return;
+        (live.events || []).forEach(ev => {
+          if (!ev || !ev.id || ev.id <= this.state.lastEventId) return;
+          this.state.lastEventId = ev.id;
+          if (ev.color) {
+            const key = this.cellKey(ev.x, ev.y);
+            const list = this.state.finds[key] || [];
+            if (!list.includes(ev.color)) {
+              list.push(ev.color);
+              this.state.finds[key] = list;
+            }
+          }
+          this.renderLogEvent(ev.drone_id, ev);
+        });
+        if (live.batteries) {
+          Object.keys(live.batteries).forEach(id => {
+            window.FrontendAPI.updateBattery(Number(id), live.batteries[id]);
+          });
+        }
+        this.applyLinks(live.links);
+        if (!live.live) return;
+        if (live.matrix) this.state.matrix = live.matrix;
+        if (live.drone1) this.state.drone1 = live.drone1;
+        if (live.drone2) this.state.drone2 = live.drone2;
+        if (live.route1) this.state.route1 = live.route1;
+        if (live.route2) this.state.route2 = live.route2;
+        this.renderGrid();
+      },
+
+      selectTool(tool) {
+        this.state.currentTool = tool;
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tool === tool);
+        });
+      },
+
+      handleCellClick(x, y) {
+        if (this.state.currentTool === 'pos1') {
+          if (this.state.matrix[y][x] !== -1) this.state.drone1 = [x, y];
+        } else if (this.state.currentTool === 'pos2') {
+          if (this.state.matrix[y][x] !== -1) this.state.drone2 = [x, y];
+        } else if (this.state.currentTool === 'cycle') {
+          const current = this.state.matrix[y][x];
+          this.state.matrix[y][x] = current === -1 ? 1 : -1;
+        } else {
+          this.state.matrix[y][x] = parseInt(this.state.currentTool, 10);
+        }
+        this.renderGrid();
+      },
+
+      resetFlyZone() {
+        for (let y = 0; y < 5; y++) {
+          for (let x = 0; x < 5; x++) {
+            this.state.matrix[y][x] = 1;
+          }
+        }
+        this.renderGrid();
+      },
+
+      swapDrones() {
+        const temp = [...this.state.drone1];
+        this.state.drone1 = [...this.state.drone2];
+        this.state.drone2 = temp;
+        this.renderGrid();
+      },
+
+      getMissionConfig() {
+        return {
+          matrix: this.state.matrix,
+          drone1: [...this.state.drone1],
+          drone2: [...this.state.drone2]
+        };
+      },
+
+      // Скачивает матрицу (1 — летать, -1 — деление/нельзя) и стартовые клетки обоих дронов
+      downloadMatrix() {
+        const rawPayload = this.getMissionConfig();
+        const blob = new Blob([JSON.stringify(rawPayload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url; link.download = 'matrix.json';
+        document.body.appendChild(link); link.click();
+        document.body.removeChild(link); URL.revokeObjectURL(url);
+      },
+
+      updateSummaryUI() {
+        document.getElementById('countRed').textContent = this.state.counts.red;
+        document.getElementById('countYellow').textContent = this.state.counts.yellow;
+        document.getElementById('countBlue').textContent = this.state.counts.blue;
+        document.getElementById('countTotal').textContent = this.state.counts.red + this.state.counts.yellow + this.state.counts.blue;
+      },
+
+      resetCounters() {
+        this.state.detectedLocations.clear();
+        this.state.counts = { red: 0, yellow: 0, blue: 0 };
+        this.updateSummaryUI();
+      },
+
+      renderLogEvent(droneId, data) {
+        const listEl = document.getElementById(droneId === 1 ? 'logListD1' : 'logListD2');
+        const now = new Date();
+        const timestamp = now.toTimeString().split(' ')[0];
+        
+        let previewHTML = data.image_b64 ? '' : `<span style="font-size:0.62rem; color:var(--text-muted);">NO TARGET</span>`;
+        let recognitionHTML = `<span style="font-size:0.75rem; color:var(--text-muted);">Телеметрия</span>`;
+
+        if (data.color && this.colors[data.color]) {
+          const cInfo = this.colors[data.color];
+          if (!data.image_b64) {
+            previewHTML = `<div class="target-square" style="background: ${cInfo.hex};"></div>`;
+          }
+          const conf = data.confidence !== undefined ? Math.round(data.confidence * 100) : 95;
+          recognitionHTML = `
+            <div class="recognition-badge" style="color: ${cInfo.hex};">
+              <span>■ Объект: ${cInfo.label}</span>
+              <span style="color: var(--text-muted); font-weight: 400;">(${conf}%)</span>
+            </div>
+          `;
+
+          const locKey = `${data.x},${data.y}`;
+          if (!this.state.detectedLocations.has(locKey)) {
+            this.state.detectedLocations.add(locKey);
+            this.state.counts[cInfo.countKey]++;
+            this.updateSummaryUI();
+          }
+        }
+
+        const bgStyle = data.image_b64 ? `style="background-image: url(data:image/jpeg;base64,${data.image_b64});"` : '';
+        const zVal = data.z !== undefined ? Number(data.z).toFixed(2) : '1.50';
+
+        const card = document.createElement('div');
+        card.className = `log-card ${droneId === 1 ? 'd1-card' : 'd2-card'}`;
+        card.innerHTML = `
+          <div class="vision-preview" ${bgStyle}>
+            ${previewHTML}
+            <span class="aruco-tag">ID:${data.y * 5 + data.x}</span>
+          </div>
+          <div class="log-meta">
+            <div class="log-top-row">
+              <span>🕒 ${timestamp}</span>
+              <span class="coords-pill">X:${data.x} Y:${data.y} Z:${zVal}м</span>
+            </div>
+            ${recognitionHTML}
+            <div class="log-msg">${data.message || ''}</div>
+          </div>
+        `;
+        listEl.prepend(card);
+      },
+
+      sshPayload(droneId) {
+        const n = droneId === 1 ? '1' : '2';
+        return {
+          drone_id: droneId,
+          user: document.getElementById('ssh' + n + 'user').value,
+          host: document.getElementById('ssh' + n + 'host').value,
+          port: document.getElementById('ssh' + n + 'port').value,
+          password: document.getElementById('ssh' + n + 'pass').value,
+          remote_dir: document.getElementById('ssh' + n + 'dir').value,
+          bridge_port: 9090
+        };
+      },
+
+      applyLinks(links) {
+        if (!links) return;
+        ['1', '2'].forEach(n => {
+          const L = links[n];
+          if (!L) return;
+          const st = document.getElementById('ssh' + n + 'status');
+          if (st) st.textContent = (L.status || '') + (L.detail ? ': ' + L.detail : '');
+          const host = document.getElementById('ssh' + n + 'host');
+          if (host && !host.matches(':focus')) host.value = L.host || host.value;
+          const user = document.getElementById('ssh' + n + 'user');
+          if (user && !user.matches(':focus')) user.value = L.user || user.value;
+          const port = document.getElementById('ssh' + n + 'port');
+          if (port && !port.matches(':focus')) port.value = L.port || port.value;
+        });
+      },
+
+      async pyTest(droneId) {
+        return this.listTopics(droneId);
+      },
+
+      async listTopics(droneId) {
+        this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Топики: ros2 topic list...' });
+        try {
+          const r = await fetch('/api/topics', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.sshPayload(droneId))
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: j.error || 'topics fail' });
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает' });
+        }
+      },
+
+      async showCamera(droneId) {
+        const host = document.getElementById('ssh' + droneId + 'host').value;
+        const img = document.getElementById('cam' + droneId + 'preview');
+        const snap = 'http://' + host + ':8080/snapshot?topic=/camera_1/image_raw&t=' + Date.now();
+        const stream = 'http://' + host + ':8080/stream?topic=/camera_1/image_raw';
+        if (img) {
+          img.style.display = 'block';
+          img.src = snap;
+          img.onerror = () => { img.src = stream; };
+        }
+        this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Камера: ' + snap });
+        try {
+          const r = await fetch('/api/camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.sshPayload(droneId))
+          });
+          const j = await r.json().catch(() => ({}));
+          if (img && j.snapshot) {
+            img.style.display = 'block';
+            img.src = j.snapshot + (j.snapshot.includes('?') ? '&' : '?') + 't=' + Date.now();
+          }
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает' });
+        }
+      },
+
+      async probeBridge(droneId) {
+        this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Стучусь на мост :9090...' });
+        try {
+          const r = await fetch('/api/bridge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.sshPayload(droneId))
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: j.error || 'bridge fail' });
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает' });
+        }
+      },
+
+      async connectDrone(droneId) {
+        const payload = this.sshPayload(droneId);
+        this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Подключаю SSH...' });
+        try {
+          const r = await fetch('/api/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: j.error || 'connect fail' });
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает' });
+        }
+      },
+
+      async testLog(droneId) {
+        this.renderLogEvent(droneId, {
+          x: this.state.drone1[0],
+          y: this.state.drone1[1],
+          z: 0,
+          message: `Запрашиваю борт ${droneId}...`
+        });
+        try {
+          const r = await fetch('/api/test-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.sshPayload(droneId))
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: j.error || 'пинг не принят панелью' });
+          }
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает. Запусти ui_server.py' });
+        }
+      }
+    };
+
+    window.FrontendAPI = {
+      updateDronePosition: (droneId, x, y) => {
+        if (droneId === 1) UI.state.drone1 = [x, y];
+        if (droneId === 2) UI.state.drone2 = [x, y];
+        UI.renderGrid();
+      },
+      addDroneLog: (droneId, payload) => {
+        UI.renderLogEvent(droneId, payload);
+      },
+      updateBattery: (droneId, voltage) => {
+        const el = document.getElementById(droneId === 1 ? 'batD1' : 'batD2');
+        if (el) el.textContent = `🔋 Дрон ${droneId}: ${voltage} В`;
+      },
+      getMatrixConfig: () => UI.getMissionConfig()
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const statusEl = document.getElementById('rosStatus');
+      UI.renderGrid();
+      const poll = async () => {
+        try {
+          const r = await fetch('/api/state', { cache: 'no-store' });
+          if (!r.ok) return;
+          const live = await r.json();
+          UI.applyLiveState(live);
+          const launch = live.launch_status || '';
+          const msg = live.launch_message || '';
+          if (live.live) {
+            statusEl.textContent = 'ДРОНЫ НА СВЯЗИ';
+            statusEl.style.color = '#10b981';
+          } else if (launch === 'pushing' || launch === 'starting') {
+            statusEl.textContent = (msg || 'ЗАПУСК...').toUpperCase();
+            statusEl.style.color = '#eab308';
+          } else if (launch === 'error') {
+            statusEl.textContent = 'ОШИБКА ЗАПУСКА';
+            statusEl.style.color = '#ef4444';
+          } else {
+            statusEl.textContent = 'ГОТОВ К ЗАПУСКУ';
+            statusEl.style.color = '#10b981';
+          }
+        } catch (e) { /* сервер ещё не поднят */ }
+      };
+      poll();
+      setInterval(poll, 400);
+    });
+
+    UI.selectedDrones = function() {
+      const list = [];
+      if (document.getElementById('fly1') && document.getElementById('fly1').checked) list.push(1);
+      if (document.getElementById('fly2') && document.getElementById('fly2').checked) list.push(2);
+      return list;
+    };
+
+    UI.emitFirstFlight = async function() {
+      return UI.emitStartFlight('first_flight.py');
+    };
+
+    UI.emitStartFlight = async function(script) {
+      const drones = UI.selectedDrones();
+      if (!drones.length) {
+        alert('Отметь галочкой хотя бы один дрон');
+        return;
+      }
+      const cfg = {
+        ...window.FrontendAPI.getMatrixConfig(),
+        link1: UI.sshPayload(1),
+        link2: UI.sshPayload(2),
+        drones,
+        script: script || 'a8gem.py'
+      };
+      try {
+        const r = await fetch('/api/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfg)
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          alert(j.error || 'Не удалось запустить полёт. Смотри logs/ui_server.log');
+        }
+      } catch (e) {
+        alert('Панель не отвечает. Запусти python3 ui_server.py');
+      }
+    };
+
+    UI.emitKillSwitch = async function() {
+      try {
+        await fetch('/api/kill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+      } catch (e) {
+        alert('Стоп не ушёл. Панель не запущена?');
+      }
+    };
+  </script>
+</body>
+</html>
