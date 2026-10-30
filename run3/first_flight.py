@@ -19,8 +19,20 @@ FLY_Z = 1.2
 # Квадрат по углам поля 5×5 и обратно в (0,0)
 SQUARE = [(0, 0), (4, 0), (4, 4), (0, 4), (0, 0)]
 
-dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
-detector = cv2.aruco.ArucoDetector(dictionary, cv2.aruco.DetectorParameters())
+def make_aruco_tools():
+    """На плате часто OpenCV 4.5: нет ArucoDetector, есть detectMarkers."""
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
+    params = cv2.aruco.DetectorParameters_create() if hasattr(cv2.aruco, "DetectorParameters_create") else cv2.aruco.DetectorParameters()
+    detector = None
+    if hasattr(cv2.aruco, "ArucoDetector"):
+        try:
+            detector = cv2.aruco.ArucoDetector(dictionary, params)
+        except Exception:
+            detector = None
+    return dictionary, params, detector
+
+
+ARUCO_DICT, ARUCO_PARAMS, ARUCO_DETECTOR = make_aruco_tools()
 
 
 def require_success(result, action):
