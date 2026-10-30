@@ -1,30 +1,24 @@
 #!/usr/bin/env python3
 """
-Квадрат по ArUco: (0,0) → (4,0) → (4,4) → (0,4) → (0,0), печать координат, посадка.
+Квадрат по карте ArUco Сверх (Left_TSU.txt / Right_TSU.txt).
 
-На дроне (в контейнере / после source ROS):
+Формат карты:
+  # dictionary: DICT_4X4_100
+  # id length x y z rot_z rot_y rot_x
+  25  0.225  -2  2  0  0  0  0
+
+Координаты уже в метрах, кадр aruco_map. Не умножать на 0.75.
 
   python3 square_flight.py
-
-Если import sverk_interfaces не находится:
-
-  source /opt/ros/humble/setup.bash
-  source ~/sverk_ws/install/setup.bash
-  python3 square_flight.py
-
-или:
-
-  docker exec -it $(docker ps --format '{{.Names}}' | grep -i sverk | head -1) bash
-  python3 /home/sverk/mission/square_flight.py
+  python3 square_flight.py Right_TSU.txt
 """
+import os
 import sys
 
 SYSTEM = "/usr/lib/python3/dist-packages"
 _paths = [p for p in sys.path if p != SYSTEM]
 _first_local = next((i for i, p in enumerate(_paths) if p.startswith("/usr/local/lib/python3")), None)
-if SYSTEM not in sys.path:
-    pass
-elif _first_local is not None:
+if SYSTEM in sys.path and _first_local is not None:
     _paths.insert(_first_local, SYSTEM)
     sys.path[:] = _paths
 
@@ -37,11 +31,74 @@ try:
     import cv2
 except Exception as exc:
     cv2 = None
-    print("cv2 нет, метки в кадре не ищем:", exc)
+    print("cv2 нет, ID меток в кадре не ищем:", exc)
 
-ARUCO_SCALE = 0.75
+HERE = os.path.dirname(os.path.abspath(__file__))
 FLY_Z = 1.2
-SQUARE = [(0, 0), (4, 0), (4, 4), (0, 4), (0, 0)]
+DICT_NAME_DEFAULT = "DICT_4X4_100"
+
+
+def load_map(path):
+    dict_name = DICT_NAME_DEFAULT
+    markers = []
+    with open(path, encoding="utf-8") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                continue
+            if line.lower().startswith("# dictionary:"):
+                dict_name = line.split(":", 1)[1].strip()
+                continue
+            if line.startswith("#"):
+                continue
+            parts = line.replace(",", " ").split()
+            markers.append({
+                "id": int(parts[0]),
+                "size": float(parts[1]),
+                "x": float(parts[2]),
+                "y": float(parts[3]),
+                "z": float(parts[4]) if len(parts) > 4 else 0.0,
+            })
+    if not markers:
+        raise RuntimeError("в карте нет меток: " + path)
+    return dict_name, markers
+
+
+def find_map_file(cli_path=None):
+    names = []
+    if cli_path:
+        names.append(cli_path)
+    names += [
+        os.path.join(HERE, "Right_TSU.txt"),
+        os.path.join(HERE, "Left_TSU.txt"),
+        os.path.join(os.path.expanduser("~"), "Right_TSU.txt"),
+        os.path.join(os.path.expanduser("~"), "Загрузки", "1234", "Right_TSU.txt"),
+        "/home/sverk/mission/Right_TSU.txt",
+        "/home/sverk/Right_TSU.txt",
+    ]
+    for path in names:
+        if path and os.path.isfile(path):
+            return path
+    raise FileNotFoundError("не найден Right_TSU.txt / Left_TSU.txt")
+
+
+def square_meters(markers):
+    xs = [m["x"] for m in markers]
+    ys = [m["y"] for m in markers]
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    # обход по периметру, старт — левый верх карты (как первая строка файла)
+    return [
+        (xmin, ymax),
+        (xmax, ymax),
+        (xmax, ymin),
+        (xmin, ymin),
+        (xmin, ymax),
+    ]
+
+
+def nearest_marker(markers, x, y):
+    return min(markers, key=lambda m: (m["x"] - x) ** 2 + (m["y"] - y) ** 2)
 
 
 def init_drone():
@@ -51,9 +108,8 @@ def init_drone():
         return sverk_interfaces.init(node_name="square_flight")
 
 
-def goto_cell(drone, cx, cy, z=FLY_Z, arm=False):
-    x, y = cx * ARUCO_SCALE, cy * ARUCO_SCALE
-    print(f"летим в клетку ({cx},{cy})  aruco_map=({x:.2f},{y:.2f})")
+def goto_xy(drone, x, y, z=FLY_Z, arm=False):
+    print(f"летим в aruco_map ({x:.2f}, {y:.2f}, {z:.2f})")
     return drone.control.navigate_wait(
         x=x, y=y, z=z, yaw=float("nan"),
         speed=0.35, frame_id="aruco_map", auto_arm=arm, timeout=40.0, tolerance=0.18,
@@ -62,12 +118,11 @@ def goto_cell(drone, cx, cy, z=FLY_Z, arm=False):
 
 def print_pose(drone, label):
     t = drone.control.get_telemetry(frame_id="aruco_map")
-    ax = t.x / ARUCO_SCALE if not math.isnan(t.x) else float("nan")
-    ay = t.y / ARUCO_SCALE if not math.isnan(t.y) else float("nan")
-    print(f"{label}  map=({t.x:.2f},{t.y:.2f},{t.z:.2f})  клетка≈({ax:.1f},{ay:.1f})")
+    print(f"{label}  aruco_map=({t.x:.2f}, {t.y:.2f}, {t.z:.2f})")
+    return t
 
 
-def scan_ids(drone):
+def scan_ids(drone, dict_name):
     if cv2 is None:
         return
     frame = None
@@ -90,17 +145,14 @@ def scan_ids(drone):
         print("  камера: нет кадра")
         return
     gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
+    dic = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dict_name, cv2.aruco.DICT_4X4_100))
     try:
-        if hasattr(cv2.aruco, "detectMarkers"):
-            params = (
-                cv2.aruco.DetectorParameters_create()
-                if hasattr(cv2.aruco, "DetectorParameters_create")
-                else cv2.aruco.DetectorParameters()
-            )
-            _c, ids, _ = cv2.aruco.detectMarkers(gray, dictionary, parameters=params)
-        else:
-            ids = None
+        params = (
+            cv2.aruco.DetectorParameters_create()
+            if hasattr(cv2.aruco, "DetectorParameters_create")
+            else cv2.aruco.DetectorParameters()
+        )
+        _c, ids, _ = cv2.aruco.detectMarkers(gray, dic, parameters=params)
     except Exception as exc:
         print("  ArUco:", exc)
         return
@@ -123,7 +175,16 @@ def land(drone, timeout=40.0):
 
 
 def main():
-    print("квадрат", SQUARE)
+    map_path = find_map_file(sys.argv[1] if len(sys.argv) > 1 else None)
+    dict_name, markers = load_map(map_path)
+    route = square_meters(markers)
+    print("карта:", map_path)
+    print("словарь:", dict_name, "меток:", len(markers))
+    print("квадрат (м):", route)
+    for x, y in route:
+        m = nearest_marker(markers, x, y)
+        print(f"  угол ({x:.1f},{y:.1f}) → id {m['id']} @ ({m['x']},{m['y']})")
+
     drone = init_drone()
     try:
         cam = getattr(drone, "camera", None)
@@ -139,10 +200,12 @@ def main():
             speed=0.35, frame_id="body", auto_arm=True, timeout=30.0, tolerance=0.18,
         )
 
-        for i, (cx, cy) in enumerate(SQUARE):
-            goto_cell(drone, cx, cy, arm=True)
-            print_pose(drone, f"точка {i + 1}/{len(SQUARE)}")
-            scan_ids(drone)
+        for i, (x, y) in enumerate(route):
+            m = nearest_marker(markers, x, y)
+            print(f"точка {i + 1}/{len(route)} цель id={m['id']}")
+            goto_xy(drone, x, y, arm=True)
+            print_pose(drone, f"пришли к id {m['id']}")
+            scan_ids(drone, dict_name)
             time.sleep(0.3)
 
         print("посадка")
