@@ -1,5 +1,7 @@
 drones/
-.git/
 __pycache__/
 *.pyc
 *.log
+run2/logs/
+**/.askpass*
+

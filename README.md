@@ -1,8 +1,15 @@
 # kultdron
 
-it's all about we use like dr*g's, but we use drones
+Основной репозиторий Сверх.Рой: https://github.com/lepehah/kultdron
 
-Это **отдельный** репозиторий: https://github.com/lepehah/kultdron
+Панель:
 
-Интенсив Сверх.Рой (два дрона, матрица, панель) живёт здесь: https://github.com/lepehah/1234
+```bash
+cd run2
+python3 ui_server.py
+```
+
+http://127.0.0.1:8080/
+
+Документы: `ПРОЕКТ.md`, `ИЗМЕНЕНИЯ.md`, `GIT.md`.
  
